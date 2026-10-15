@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Chromium Extension",
+  "description": "Базовое расширение для браузеров на Chromium.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Chromium Extension",
+    "default_popup": "src/popup/popup.html"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  }
+}

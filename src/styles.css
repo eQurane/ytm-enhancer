@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #e9edf5;
+  background: #121722;
+  font-size: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+.popup { width: 340px; }
+main { padding: 24px; }
+.options main { max-width: 600px; margin: 48px auto; }
+.eyebrow { color: #91a5c7; font-size: 11px; letter-spacing: 0.1em; }
+h1 { margin: 16px 0 8px; font-size: 24px; line-height: 1.2; }
+.description, .hint { color: #abb8ce; line-height: 1.6; }
+.description { margin-bottom: 24px; }
+.hint { font-size: 13px; }
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  background: #1d2636;
+  border: 1px solid #35425a;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: #91b4ff;
+  cursor: pointer;
+}
+
+.status { min-height: 36px; color: #abb8ce; font-size: 12px; line-height: 1.5; }
+button {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #526b94;
+  border-radius: 10px;
+  color: #e9edf5;
+  background: #273c5d;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { background: #334e78; }
+:focus-visible { outline: 2px solid #a5c3ff; outline-offset: 4px; }

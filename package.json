@@ -1,0 +1,13 @@
+{
+  "name": "chromium-extension-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Базовое расширение Chromium на Manifest V3 без сборки",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
