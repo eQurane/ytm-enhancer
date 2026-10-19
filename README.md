@@ -1,4 +1,4 @@
-# YouTube Music Queue Actions
+# YTM Enhancer
 
 [![Проверки](https://github.com/eQurane/ytm-enhancer/actions/workflows/check.yml/badge.svg)](https://github.com/eQurane/ytm-enhancer/actions/workflows/check.yml)
 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Music Queue Actions",
+  "name": "YTM Enhancer",
   "description": "Лайк, дизлайк и добавление в плейлист рядом с каждой песней в очереди YouTube Music.",
-  "version": "26.10.19.1419",
+  "version": "26.10.19.1423",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage"
@@ -13,7 +13,7 @@
   },
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "Настройки очереди YouTube Music"
+    "default_title": "Настройки YTM Enhancer"
   },
   "content_scripts": [
     {
@@ -47,5 +47,5 @@
     "page": "src/options/options.html",
     "open_in_tab": true
   },
-  "version_name": "26.10.19.1419"
+  "version_name": "26.10.19.1423"
 }
