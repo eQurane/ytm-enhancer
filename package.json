@@ -1,6 +1,6 @@
 {
   "name": "youtube-music-queue-actions",
-  "version": "0.3.2",
+  "version": "26.10.19.1417",
   "private": true,
   "description": "Оценки и добавление в плейлист в очереди YouTube Music",
   "repository": {
@@ -13,7 +13,9 @@
   },
   "type": "module",
   "scripts": {
-    "check": "node scripts/check.mjs && node --test"
+    "check": "node scripts/check.mjs && node --test",
+    "version:date": "node scripts/version.mjs",
+    "package": "node scripts/package.mjs"
   },
   "engines": {
     "node": ">=20"

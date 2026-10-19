@@ -2,9 +2,11 @@
   "manifest_version": 3,
   "name": "YouTube Music Queue Actions",
   "description": "Лайк, дизлайк и добавление в плейлист рядом с каждой песней в очереди YouTube Music.",
-  "version": "0.3.2",
+  "version": "26.10.19.1417",
   "minimum_chrome_version": "111",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
@@ -15,15 +17,28 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://music.youtube.com/*"],
-      "js": ["src/shared/preferences.js", "src/content/settings-bridge.js"],
-      "css": ["src/content/queue.css"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "src/shared/preferences.js",
+        "src/content/settings-bridge.js"
+      ],
+      "css": [
+        "src/content/queue.css"
+      ],
       "run_at": "document_idle",
       "world": "ISOLATED"
     },
     {
-      "matches": ["https://music.youtube.com/*"],
-      "js": ["src/content/youtube-adapter.js", "src/content/playlist-store.js", "src/content/queue.js"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "src/content/youtube-adapter.js",
+        "src/content/playlist-store.js",
+        "src/content/queue.js"
+      ],
       "run_at": "document_idle",
       "world": "MAIN"
     }
@@ -31,5 +46,6 @@
   "options_ui": {
     "page": "src/options/options.html",
     "open_in_tab": true
-  }
+  },
+  "version_name": "26.10.19.1417"
 }

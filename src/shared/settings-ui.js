@@ -29,7 +29,8 @@ export async function mountSettings() {
     status.textContent = saved.enabled ? 'Состояние: включено' : 'Состояние: выключено';
   };
 
-  document.querySelector('#version').textContent = chrome.runtime.getManifest().version;
+  const manifest = chrome.runtime.getManifest();
+  document.querySelector('#version').textContent = manifest.version_name ?? manifest.version;
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;

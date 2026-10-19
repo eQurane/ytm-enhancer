@@ -3,13 +3,16 @@ import { readdir, readFile, access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { parseReleaseVersion } from './version.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 
 assert.equal(manifest.manifest_version, 3, 'Expected Manifest V3');
-assert.equal(manifest.version, pkg.version, 'Package and manifest versions must match');
+const release = parseReleaseVersion(pkg.version);
+assert.equal(manifest.version, release.version, 'Manifest must use the numeric release version');
+assert.equal(manifest.version_name, pkg.version, 'Display and package versions must match');
 assert.deepEqual(manifest.permissions, ['storage'], 'Only storage permission is required');
 assert.ok(Number(manifest.minimum_chrome_version) >= 111, 'MAIN content scripts require Chrome 111+');
 assert.equal(manifest.host_permissions, undefined, 'Do not request additional host access');
@@ -62,4 +65,5 @@ async function checkDirectory(directory) {
 
 await checkDirectory(join(root, 'src'));
 await checkDirectory(join(root, 'tests'));
+await checkDirectory(join(root, 'scripts'));
 console.log('OK: manifest, versions, JavaScript syntax and local file references.');
