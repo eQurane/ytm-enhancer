@@ -3,6 +3,14 @@
   "version": "0.3.2",
   "private": true,
   "description": "Оценки и добавление в плейлист в очереди YouTube Music",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eQurane/ytm-enhancer.git"
+  },
+  "homepage": "https://github.com/eQurane/ytm-enhancer#readme",
+  "bugs": {
+    "url": "https://github.com/eQurane/ytm-enhancer/issues"
+  },
   "type": "module",
   "scripts": {
     "check": "node scripts/check.mjs && node --test"
