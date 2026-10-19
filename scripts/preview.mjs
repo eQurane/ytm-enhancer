@@ -9,7 +9,8 @@ http.createServer(async (request, response) => {
   try {
     const path = resolve(root, `.${decodeURIComponent(new URL(request.url, 'http://localhost').pathname)}`);
     if (!path.startsWith(root.endsWith(sep) ? root : root + sep)
-      || (!path.includes(`${sep}src${sep}content${sep}`) && !path.includes(`${sep}tests${sep}fixtures${sep}`))) {
+      || (!path.includes(`${sep}src${sep}content${sep}`) && !path.includes(`${sep}src${sep}shared${sep}`)
+        && !path.includes(`${sep}tests${sep}fixtures${sep}`))) {
       response.writeHead(403).end();
       return;
     }

@@ -28,10 +28,14 @@ for (const script of manifest.content_scripts) {
 }
 assert.equal(manifest.content_scripts[0].world, 'ISOLATED');
 assert.equal(manifest.content_scripts[1].world, 'MAIN');
+const isolatedScripts = new Set(manifest.content_scripts[0].js);
+assert.ok(manifest.content_scripts[1].js.every((asset) => !isolatedScripts.has(asset)),
+  'Use distinct script paths in isolated and MAIN worlds; Chromium can deduplicate injections');
 
 for (const entry of [
   manifest.background.service_worker,
   manifest.options_ui.page,
+  manifest.action.default_popup,
 ]) {
   await access(resolve(root, entry));
 }

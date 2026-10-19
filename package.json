@@ -1,6 +1,6 @@
 {
   "name": "youtube-music-queue-actions",
-  "version": "0.2.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Оценки и добавление в плейлист в очереди YouTube Music",
   "type": "module",

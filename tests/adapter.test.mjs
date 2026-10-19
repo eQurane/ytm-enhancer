@@ -7,11 +7,11 @@ const source = await readFile(new URL('../src/content/youtube-adapter.js', impor
 const VIDEO = 'aaaaaaaaaaa';
 const OTHER = 'bbbbbbbbbbb';
 
-function setup({ loggedIn = true, player = null } = {}) {
+function setup({ loggedIn = true, player = null, app = null } = {}) {
   const context = vm.createContext({
     setTimeout, clearTimeout,
     ytcfg: { get: () => loggedIn },
-    document: { querySelector: () => player },
+    document: { querySelector: (selector) => selector === 'ytmusic-app' ? app : player },
     CustomEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
   });
   vm.runInContext(source, context);
@@ -245,4 +245,101 @@ test('playlist saves still reject network and server errors without opening dial
   nextResponse = () => Promise.resolve({ data: { error: { code: 403 } } });
   await assert.rejects(adapter.saveToPlaylist(origin, entry), /отклонил/);
   assert.equal(popups, 0);
+});
+
+function service(respond) {
+  const commands = [];
+  return { commands, dispatchEvent(event) {
+    assert.equal(event.detail.actionName, 'yt-service-request');
+    const command = event.detail.args[1];
+    commands.push(command);
+    event.detail.returnValue.push({ ajaxPromise: Promise.resolve().then(() => ({ data: respond(command) })) });
+  } };
+}
+
+function playlistOption(videoId = VIDEO, contains = 'NONE') {
+  return { playlistAddToOptionRenderer: {
+    playlistId: 'PL_music', title: { simpleText: 'Music' }, containsSelectedVideos: contains,
+    addToPlaylistServiceEndpoint: { playlistEditEndpoint: { playlistId: 'PL_music',
+      actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: videoId }] } },
+    removeFromPlaylistServiceEndpoint: { playlistEditEndpoint: { playlistId: 'PL_music',
+      actions: [{ action: 'ACTION_REMOVE_VIDEO', setVideoId: 'set-video', removedVideoId: videoId }] } },
+  } };
+}
+
+test('playlist discovery always constructs a read request and validates editable targets', async () => {
+  const adapter = setup();
+  const wrongVideo = playlistOption(OTHER);
+  const readOnly = playlistOption();
+  readOnly.playlistAddToOptionRenderer.isEditable = false;
+  const origin = service(() => ({ contents: [{ addToPlaylistRenderer: {
+    playlists: [playlistOption(), wrongVideo, readOnly],
+  } }] }));
+  const options = await adapter.listPlaylists(origin, VIDEO);
+  assert.equal(options.length, 1);
+  assert.equal(options[0].contains, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(origin.commands)), [{ addToPlaylistEndpoint: { videoIds: [VIDEO] } }]);
+  assert.equal('params' in origin.commands[0].addToPlaylistEndpoint, false);
+  const unknown = playlistOption(VIDEO, undefined);
+  delete unknown.playlistAddToOptionRenderer.containsSelectedVideos;
+  const missingState = service(() => ({ contents: [{ addToPlaylistRenderer: { playlists: [unknown] } }] }));
+  assert.equal((await adapter.listPlaylists(missingState, VIDEO))[0].contains, null);
+  await assert.rejects(adapter.listPlaylists(service(() => ({})), VIDEO), /не вернул/);
+  await assert.rejects(setup({ loggedIn: false }).listPlaylists(origin, VIDEO), /Войдите/);
+});
+
+test('historical membership reads every page and collects removal identifiers', async () => {
+  const adapter = setup();
+  const origin = service((command) => command.browseEndpoint ? {
+    contents: { musicPlaylistShelfRenderer: { contents: [{ musicResponsiveListItemRenderer: {
+      playlistItemData: { videoId: VIDEO, playlistSetVideoId: 'first' },
+    } }], continuations: [{ nextContinuationData: { continuation: 'page2' } }] } },
+  } : { continuationContents: { musicPlaylistShelfContinuation: { contents: [{ musicResponsiveListItemRenderer: {
+    playlistItemData: { videoId: OTHER, playlistSetVideoId: 'second' },
+  } }] } } });
+  const videos = await adapter.readPlaylist(origin, 'PL_music');
+  assert.deepEqual([...videos.keys()], [VIDEO, OTHER]);
+  assert.deepEqual(Array.from(videos.get(OTHER)), ['second']);
+  assert.equal(origin.commands[1].continuationCommand.token, 'page2');
+  await assert.rejects(adapter.readPlaylist(service(() => ({})), 'PL_music'), /проверить/);
+});
+
+test('playlist reads reject repeated continuations rather than claiming partial absence', async () => {
+  const adapter = setup();
+  const origin = service(() => ({ contents: { musicPlaylistShelfRenderer: {
+    contents: [], continuations: [{ nextContinuationData: { continuation: 'repeat' } }],
+  } } }));
+  await assert.rejects(adapter.readPlaylist(origin, 'PL_music'), /дочитать/);
+  assert.equal(origin.commands.length, 2);
+});
+
+test('browse reads use the native network manager without navigating or reusing its response cache', async () => {
+  const calls = [];
+  const manager = {
+    fetch() { throw new Error('cached path must not be used'); },
+    getRequestParams(params) { return { ...params, context: { request: { sessionIndex: 'native' } } }; },
+    async sendRequest_(path, params) {
+      calls.push({ path, params });
+      return { contents: { musicPlaylistShelfRenderer: { contents: [] } } };
+    },
+  };
+  const adapter = setup({ app: { polymerController: { networkManager: manager } } });
+  const videos = await adapter.readPlaylist({ dispatchEvent() { throw new Error('must not navigate'); } }, 'PL_music');
+  assert.equal(videos.size, 0);
+  assert.equal(calls[0].path, '/browse');
+  assert.equal(calls[0].params.browseId, 'VLPL_music');
+  assert.equal(calls[0].params.context.request.sessionIndex, 'native');
+});
+
+test('playlist edits use only matching native commands and remove every matching occurrence', async () => {
+  const adapter = setup();
+  const origin = service(() => ({ success: true }));
+  const option = { id: 'PL_music', addEndpoint: playlistOption().playlistAddToOptionRenderer.addToPlaylistServiceEndpoint };
+  await adapter.editPlaylist(origin, VIDEO, option, true);
+  await adapter.editPlaylist(origin, VIDEO, option, false, ['first', 'second']);
+  assert.equal(origin.commands[1].playlistEditEndpoint.actions.length, 2);
+  assert.equal(origin.commands[1].playlistEditEndpoint.actions[1].setVideoId, 'second');
+  await assert.rejects(adapter.editPlaylist(origin, OTHER, option, true), /недоступна/);
+  await assert.rejects(adapter.editPlaylist(origin, VIDEO, option, false), /недоступна/);
+  assert.equal(origin.commands.length, 2);
 });

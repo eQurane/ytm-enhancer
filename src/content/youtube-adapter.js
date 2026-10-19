@@ -25,6 +25,13 @@
       : config?.data_?.LOGGED_IN) === false;
   }
 
+  function accountKey() {
+    const config = globalThis.ytcfg;
+    const get = (key) => typeof config?.get === 'function' ? config.get(key) : config?.data_?.[key];
+    // Used only in memory to discard state after an account switch.
+    return `${get('LOGGED_IN')}:${get('SESSION_INDEX')}:${get('DELEGATED_SESSION_ID')}`;
+  }
+
   function targetsVideo(endpoint, videoId) {
     const target = endpoint?.addToPlaylistEndpoint;
     return target?.videoId === videoId
@@ -146,8 +153,126 @@
     }
   }
 
+  const isPlaylistId = (value) => typeof value === 'string' && /^[\w-]{2,160}$/.test(value);
+
+  function nodes(data, key, found = []) {
+    if (!data || typeof data !== 'object') return found;
+    if (data[key]) found.push(data[key]);
+    for (const [name, value] of Object.entries(data)) {
+      if (name !== key && value && typeof value === 'object') nodes(value, key, found);
+    }
+    return found;
+  }
+
+  function validEdit(endpoint, playlistId, videoId, operation) {
+    const edit = endpoint?.playlistEditEndpoint;
+    return edit?.playlistId === playlistId && Array.isArray(edit.actions) && edit.actions.length > 0
+      && edit.actions.every((item) => operation === 'add'
+        ? item.action === 'ACTION_ADD_VIDEO' && item.addedVideoId === videoId
+        : item.action === 'ACTION_REMOVE_VIDEO' && typeof item.setVideoId === 'string'
+          && item.setVideoId !== 'to_be_updated_by_client'
+          && (!item.removedVideoId || item.removedVideoId === videoId));
+  }
+
+  async function listPlaylists(origin, videoId) {
+    if (loggedOut()) throw new Error('Войдите в аккаунт YouTube Music.');
+    if (videoId !== undefined && !isVideoId(videoId)) throw new Error('Не удалось определить песню.');
+    // Construct a read-only request. Never reuse params from the queue's save
+    // command: they can instruct the server to save to the remembered playlist.
+    const endpoint = { addToPlaylistEndpoint: { videoIds: videoId ? [videoId] : [] } };
+    const data = await responseOf(action(origin, 'yt-service-request', [origin, endpoint]));
+    const renderer = nodes(data, 'addToPlaylistRenderer')[0];
+    if (!renderer || !Array.isArray(renderer.playlists)) {
+      throw new Error('YouTube Music не вернул список плейлистов. Обновите страницу.');
+    }
+    const result = new Map();
+    for (const item of renderer.playlists) {
+      const option = item.playlistAddToOptionRenderer;
+      const addEndpoint = option?.addToPlaylistServiceEndpoint;
+      const id = option?.playlistId ?? addEndpoint?.playlistEditEndpoint?.playlistId;
+      const title = textOf(option?.title).slice(0, 500);
+      const edit = addEndpoint?.playlistEditEndpoint;
+      if (!isPlaylistId(id) || !title || option.isEditable === false || edit?.playlistId !== id
+        || !Array.isArray(edit.actions) || !edit.actions.length
+        || !edit.actions.every((entry) => entry.action === 'ACTION_ADD_VIDEO'
+          && (!videoId || entry.addedVideoId === videoId))) continue;
+      const removeEndpoint = option.removeFromPlaylistServiceEndpoint;
+      result.set(id, {
+        id, title,
+        contains: option.containsSelectedVideos === 'ALL' ? true
+          : option.containsSelectedVideos === 'NONE' ? false : null,
+        addEndpoint: videoId && validEdit(addEndpoint, id, videoId, 'add') ? addEndpoint : null,
+        removeEndpoint: videoId && validEdit(removeEndpoint, id, videoId, 'remove') ? removeEndpoint : null,
+      });
+    }
+    return [...result.values()];
+  }
+
+  async function readPlaylist(origin, playlistId) {
+    if (loggedOut() || !isPlaylistId(playlistId)) throw new Error('Плейлист недоступен. Выберите другой.');
+    const videos = new Map();
+    const seen = new Set();
+    let endpoint = { browseEndpoint: { browseId: `VL${playlistId}` } };
+    while (endpoint) {
+      const app = document.querySelector('ytmusic-app');
+      const manager = [app, app?.polymerController, app?.inst]
+        .map((element) => element?.networkManager).find((value) => typeof value?.fetch === 'function');
+      // Browse commands are navigation, so yt-service-request can consume them
+      // without returning ajaxPromise. Read through the site's own network
+      // manager instead; it supplies the current session and never navigates.
+      let data;
+      if (manager) {
+        const params = endpoint.browseEndpoint ?? { continuation: endpoint.continuationCommand.token };
+        const request = typeof manager.sendRequest_ === 'function' && typeof manager.getRequestParams === 'function'
+          ? manager.sendRequest_('/browse', manager.getRequestParams(params)) : manager.fetch('/browse', params);
+        data = await responseOf([{ ajaxPromise: request }]);
+      } else {
+        data = await responseOf(action(origin, 'yt-service-request', [origin, endpoint]));
+      }
+      const shelves = [...nodes(data, 'musicPlaylistShelfRenderer'), ...nodes(data, 'musicShelfRenderer'),
+        ...nodes(data, 'musicPlaylistShelfContinuation'), ...nodes(data, 'musicShelfContinuation')];
+      const appended = nodes(data, 'appendContinuationItemsAction');
+      if (!shelves.length && !appended.length) {
+        throw new Error('Не удалось проверить содержимое плейлиста. Выберите другой или повторите попытку.');
+      }
+      const content = [...shelves, ...appended];
+      for (const item of nodes(content, 'musicResponsiveListItemRenderer')) {
+        const videoId = item.playlistItemData?.videoId;
+        const setId = item.playlistItemData?.playlistSetVideoId;
+        if (!isVideoId(videoId)) continue;
+        const ids = videos.get(videoId) ?? [];
+        if (typeof setId === 'string' && !ids.includes(setId)) ids.push(setId);
+        videos.set(videoId, ids);
+      }
+      const token = nodes(content, 'nextContinuationData')[0]?.continuation;
+      const command = nodes(content, 'continuationItemRenderer')
+        .map((item) => item.continuationEndpoint).find((item) => item?.continuationCommand?.token);
+      endpoint = command ?? (token ? { continuationCommand: { token, request: 'CONTINUATION_REQUEST_TYPE_BROWSE' } } : null);
+      const next = endpoint?.continuationCommand?.token;
+      if (endpoint && (!next || seen.has(next))) throw new Error('Не удалось дочитать плейлист. Повторите попытку.');
+      if (next) seen.add(next);
+    }
+    return videos;
+  }
+
+  async function editPlaylist(origin, videoId, option, add, setIds = []) {
+    if (loggedOut() || !isVideoId(videoId) || !isPlaylistId(option?.id)) {
+      throw new Error('Изменение плейлиста недоступно.');
+    }
+    let endpoint = add ? option.addEndpoint : option.removeEndpoint;
+    if (!add && !endpoint && setIds.length) {
+      endpoint = { playlistEditEndpoint: { playlistId: option.id, actions: setIds.map((setVideoId) => ({
+        action: 'ACTION_REMOVE_VIDEO', setVideoId, removedVideoId: videoId,
+      })) } };
+    }
+    if (!validEdit(endpoint, option.id, videoId, add ? 'add' : 'remove')) {
+      throw new Error('Команда плейлиста недоступна. Обновите страницу или выберите другой плейлист.');
+    }
+    await responseOf(action(origin, 'yt-service-request', [origin, endpoint]));
+  }
+
   globalThis[KEY] = Object.freeze({
     snapshot, dataOf, setData, bindRating, ratingOf, playerRating,
-    saveToPlaylist, responseOf, isVideoId, isStatus,
+    saveToPlaylist, responseOf, isVideoId, isStatus, isPlaylistId, listPlaylists, readPlaylist, editPlaylist, accountKey,
   });
 })();

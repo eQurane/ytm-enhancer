@@ -7,10 +7,13 @@
   <link rel="stylesheet" href="fixture.css">
   <link rel="stylesheet" href="../../src/content/queue.css">
   <script defer src="fixture.js"></script>
+  <script defer src="../../src/shared/preferences.js"></script>
   <script defer src="../../src/content/youtube-adapter.js"></script>
+  <script defer src="../../src/content/playlist-store.js"></script>
   <script defer src="../../src/content/queue.js"></script>
 </head>
 <body>
+  <ytmusic-app>
   <main>
     <h1>Проверка кнопок очереди</h1>
     <p>Смоделированные компоненты YouTube Music. Запросов к вашему аккаунту нет.</p>
@@ -21,6 +24,9 @@
       <button id="reorder">Переставить строки</button>
       <button id="fail">Ошибка следующего запроса</button>
       <button id="guest">Выйти из аккаунта</button>
+      <label>Плейлист <select id="playlist"><option value="">Не выбран</option><option value="PL_fixture_music">music</option><option value="PL_fixture_later">listen later</option></select></label>
+      <label>Модификатор <select id="modifier"><option value="shift">Shift</option><option value="ctrl">Ctrl</option><option value="alt">Alt</option></select></label>
+      <button id="delete-playlist">Удалить плейлист music</button>
     </div>
     <p id="requests" role="status">Запросов: 0 · Запусков песни: 0</p>
     <section id="panel" aria-label="Очередь">
@@ -32,5 +38,6 @@
       <ytmusic-like-button-renderer></ytmusic-like-button-renderer>
     </ytmusic-player-bar>
   </main>
+  </ytmusic-app>
 </body>
 </html>

@@ -8,9 +8,48 @@
   let plays = 0;
   globalThis.ytcfg = { get: () => signedIn };
   const titles = new Map();
+  const playlists = new Map([
+    ['PL_fixture_music', { title: 'music', videos: new Set(['aaaaaaaaaaa', 'bbbbbbbbbbb']) }],
+    ['PL_fixture_later', { title: 'listen later', videos: new Set(['ccccccccccc']) }],
+  ]);
+  let preferences = { enabled: true, defaultPlaylist: null, playlistModifier: 'shift' };
+  function publish() {
+    document.documentElement.setAttribute('data-ytmq-settings', JSON.stringify(preferences));
+    document.documentElement.setAttribute('data-ytmq-enabled', String(preferences.enabled));
+  }
+  document.addEventListener('ytmq-default-playlist-request', (event) => {
+    const request = JSON.parse(event.detail);
+    preferences.defaultPlaylist = request.playlist;
+    document.querySelector('#playlist').value = request.playlist.id;
+    publish();
+    document.dispatchEvent(new CustomEvent('ytmq-default-playlist-response', { detail: JSON.stringify({ id: request.id }) }));
+  });
   function summary() {
     document.querySelector('#requests').textContent = `Запросов: ${requests} · Запусков песни: ${plays}`;
   }
+  // Browse is a navigation command in the real site. Only its network manager
+  // can read a playlist without changing the current page.
+  document.querySelector('ytmusic-app').networkManager = {
+    getRequestParams: (params) => params,
+    fetch(path, params) { return this.sendRequest_(path, params); },
+    sendRequest_(path, params) {
+      if (path !== '/browse') throw new Error('Unexpected fixture path');
+      requests += 1;
+      summary();
+      const shouldFail = failNext;
+      failNext = false;
+      return new Promise((resolve, reject) => setTimeout(() => {
+        if (shouldFail) { reject(new Error('Тестовая ошибка сети. Повторите действие.')); return; }
+        const playlist = playlists.get(params.browseId?.slice(2));
+        if (!playlist) { resolve({ error: { code: 404 } }); return; }
+        resolve({ contents: { musicPlaylistShelfRenderer: {
+          contents: [...playlist.videos].map((videoId) => ({ musicResponsiveListItemRenderer: {
+            playlistItemData: { videoId, playlistSetVideoId: `set_${videoId}` },
+          } })),
+        } } });
+      }, 100));
+    },
+  };
 
   class LikeRenderer extends HTMLElement {
     set data(data) {
@@ -104,6 +143,7 @@
   document.addEventListener('yt-action', (event) => {
     const { actionName, args, returnValue } = event.detail;
     if (actionName === 'yt-service-request') {
+      if (args[1].browseEndpoint || args[1].continuationCommand) return;
       requests += 1;
       summary();
       const shouldFail = failNext;
@@ -113,9 +153,35 @@
         setTimeout(() => {
           if (shouldFail) reject(new Error('Тестовая ошибка сети. Повторите действие.'));
           else if (args[1].addToPlaylistEndpoint) {
+            const videoId = args[1].addToPlaylistEndpoint.videoIds?.[0];
             resolve({ data: { contents: [{ addToPlaylistRenderer: {
-              videoId: args[1].addToPlaylistEndpoint.videoId,
+              playlists: [...playlists].map(([id, playlist]) => ({ playlistAddToOptionRenderer: {
+                playlistId: id, title: { simpleText: playlist.title },
+                // Deliberately omit containsSelectedVideos like the current
+                // music UI. Historical membership must come from browse data.
+                addToPlaylistServiceEndpoint: { playlistEditEndpoint: {
+                  playlistId: id, actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: videoId }],
+                } },
+              } })),
             } }] } });
+          } else if (args[1].browseEndpoint) {
+            const id = args[1].browseEndpoint.browseId.slice(2);
+            const playlist = playlists.get(id);
+            if (!playlist) { resolve({ data: { error: { code: 404 } } }); return; }
+            resolve({ data: { contents: { musicPlaylistShelfRenderer: {
+              contents: [...playlist.videos].map((videoId) => ({ musicResponsiveListItemRenderer: {
+                playlistItemData: { videoId, playlistSetVideoId: `set_${videoId}` },
+              } })),
+            } } } });
+          } else if (args[1].playlistEditEndpoint) {
+            const edit = args[1].playlistEditEndpoint;
+            const playlist = playlists.get(edit.playlistId);
+            if (!playlist) { resolve({ data: { error: { code: 404 } } }); return; }
+            for (const item of edit.actions) {
+              if (item.action === 'ACTION_ADD_VIDEO') playlist.videos.add(item.addedVideoId);
+              else playlist.videos.delete(item.removedVideoId);
+            }
+            resolve({ data: { success: true } });
           } else resolve({ data: { success: true } });
         }, 100);
       }) });
@@ -134,8 +200,8 @@
   });
 
   document.querySelector('#toggle').onclick = (event) => {
-    const enabled = document.documentElement.getAttribute('data-ytmq-enabled') !== 'true';
-    document.documentElement.setAttribute('data-ytmq-enabled', String(enabled));
+    const enabled = preferences.enabled = !preferences.enabled;
+    publish();
     event.target.textContent = enabled ? 'Выключить' : 'Включить';
   };
   document.querySelector('#narrow').onclick = () => document.querySelector('#panel').classList.toggle('narrow');
@@ -152,4 +218,17 @@
     signedIn = !signedIn;
     event.target.textContent = signedIn ? 'Выйти из аккаунта' : 'Войти в аккаунт';
   };
+  document.querySelector('#playlist').onchange = (event) => {
+    const id = event.target.value;
+    preferences.defaultPlaylist = id ? { id, title: playlists.get(id)?.title ?? 'music' } : null;
+    publish();
+  };
+  document.querySelector('#modifier').onchange = (event) => {
+    preferences.playlistModifier = event.target.value;
+    publish();
+  };
+  document.querySelector('#delete-playlist').onclick = () => {
+    playlists.delete('PL_fixture_music');
+  };
+  publish();
 })();
