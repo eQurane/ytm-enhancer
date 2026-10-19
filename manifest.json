@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Music Queue Actions",
   "description": "Лайк, дизлайк и добавление в плейлист рядом с каждой песней в очереди YouTube Music.",
-  "version": "26.10.19.1417",
+  "version": "26.10.19.1419",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage"
@@ -47,5 +47,5 @@
     "page": "src/options/options.html",
     "open_in_tab": true
   },
-  "version_name": "26.10.19.1417"
+  "version_name": "26.10.19.1419"
 }
