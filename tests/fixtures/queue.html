@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru" data-ytmq-enabled="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Queue Actions — тестовый стенд</title>
+  <link rel="stylesheet" href="fixture.css">
+  <link rel="stylesheet" href="../../src/content/queue.css">
+  <script defer src="fixture.js"></script>
+  <script defer src="../../src/content/youtube-adapter.js"></script>
+  <script defer src="../../src/content/queue.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Проверка кнопок очереди</h1>
+    <p>Смоделированные компоненты YouTube Music. Запросов к вашему аккаунту нет.</p>
+    <div class="tools">
+      <button id="toggle">Выключить</button>
+      <button id="narrow">Узкая панель</button>
+      <button id="replace">Заменить данные первой строки</button>
+      <button id="reorder">Переставить строки</button>
+      <button id="fail">Ошибка следующего запроса</button>
+      <button id="guest">Выйти из аккаунта</button>
+    </div>
+    <p id="requests" role="status">Запросов: 0 · Запусков песни: 0</p>
+    <section id="panel" aria-label="Очередь">
+      <h2>UP NEXT</h2>
+      <ytmusic-player-queue></ytmusic-player-queue>
+    </section>
+    <ytmusic-player-bar>
+      <span>Сейчас играет: GO AHEAD</span>
+      <ytmusic-like-button-renderer></ytmusic-like-button-renderer>
+    </ytmusic-player-bar>
+  </main>
+</body>
+</html>

@@ -1,11 +1,11 @@
 {
-  "name": "chromium-extension-starter",
-  "version": "0.1.0",
+  "name": "youtube-music-queue-actions",
+  "version": "0.2.1",
   "private": true,
-  "description": "Базовое расширение Chromium на Manifest V3 без сборки",
+  "description": "Оценки и добавление в плейлист в очереди YouTube Music",
   "type": "module",
   "scripts": {
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs && node --test"
   },
   "engines": {
     "node": ">=20"

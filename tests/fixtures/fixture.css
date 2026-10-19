@@ -1,0 +1,26 @@
+:root { color-scheme: dark; font: 14px/1.5 Arial, sans-serif; color: #eee; background: #070707; }
+body { margin: 0; }
+main { max-width: 1000px; margin: 48px auto; padding: 0 24px; }
+h1 { font-size: 26px; }
+p { color: #aaa; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.tools button { padding: 8px 12px; border: 1px solid #444; background: #252525; border-radius: 8px; cursor: pointer; }
+#panel { width: 520px; max-width: 100%; margin-top: 32px; }
+#panel.narrow { width: 320px; }
+h2 { font-size: 13px; padding: 12px 8px; border-bottom: 1px solid #555; }
+ytmusic-player-queue { display: block; }
+ytmusic-player-queue-item { display: flex; align-items: center; height: 58px; gap: 8px; border-bottom: 1px solid #262626; }
+ytmusic-player-queue-item:hover { background: #1e1e1e; }
+.left-items { width: 32px; height: 32px; display: grid; place-items: center; background: #353535; }
+.song-info { flex: 1; min-width: 0; }
+.song-title, .byline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-title { font-weight: 600; }
+.byline, .duration { color: #aaa; }
+ytmusic-menu-renderer { width: 28px; justify-content: center; }
+ytmusic-menu-renderer button { padding: 0; border: 0; background: none; color: white; }
+ytmusic-player-bar { display: flex; align-items: center; justify-content: space-between; width: 520px; max-width: 100%; margin-top: 32px; padding: 16px 0; border-top: 1px solid #666; }
+ytmusic-like-button-renderer { display: flex; }
+ytmusic-like-button-renderer button { border: 0; color: white; background: none; width: 32px; height: 32px; cursor: pointer; border-radius: 50%; }
+ytmusic-like-button-renderer button[aria-pressed="true"] { background: #555; }
+ytmusic-like-button-renderer svg { width: 20px; height: 20px; fill: currentColor; }
+dialog { min-width: 260px; padding: 24px; border: 1px solid #777; border-radius: 12px; }

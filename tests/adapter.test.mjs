@@ -1,0 +1,248 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+
+const source = await readFile(new URL('../src/content/youtube-adapter.js', import.meta.url), 'utf8');
+const VIDEO = 'aaaaaaaaaaa';
+const OTHER = 'bbbbbbbbbbb';
+
+function setup({ loggedIn = true, player = null } = {}) {
+  const context = vm.createContext({
+    setTimeout, clearTimeout,
+    ytcfg: { get: () => loggedIn },
+    document: { querySelector: () => player },
+    CustomEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
+  });
+  vm.runInContext(source, context);
+  return vm.runInContext("globalThis[Symbol.for('ytmq.adapter.v1')]", context);
+}
+
+function row(data, menu) {
+  return { data, querySelector: () => menu && { data: menu }, hasAttribute: () => false };
+}
+
+function metadata(videoId = VIDEO, status = 'LIKE') {
+  return {
+    videoId,
+    menu: { menuRenderer: {
+      topLevelButtons: [{ likeButtonRenderer: {
+        target: { videoId }, likeStatus: status, likesAllowed: true,
+        serviceEndpoints: ['LIKE', 'DISLIKE', 'INDIFFERENT'].map((rating) => ({
+          likeEndpoint: { status: rating, target: { videoId } },
+        })),
+      } }],
+      items: [{ menuNavigationItemRenderer: {
+        text: { runs: [{ text: 'Save to playlist' }] },
+        navigationEndpoint: { clickTrackingParams: 'native-tracking', addToPlaylistEndpoint: { videoId } },
+      } }],
+    } },
+  };
+}
+
+test('reads a song and preserves its native rating and playlist endpoints', () => {
+  const adapter = setup();
+  const data = metadata(VIDEO, 'DISLIKE');
+  const entry = adapter.snapshot(row(data));
+  assert.equal(entry.videoId, VIDEO);
+  assert.equal(entry.status, 'DISLIKE');
+  assert.equal(entry.canRate, true);
+  assert.equal(entry.canSave, true);
+  assert.equal(entry.playlistEndpoint, data.menu.menuRenderer.items[0].menuNavigationItemRenderer.navigationEndpoint);
+  assert.equal(entry.saveLabel, 'Save to playlist');
+});
+
+test('supports wrapper metadata and the menu component data fallback', () => {
+  const adapter = setup();
+  const data = metadata();
+  const wrapped = { playlistPanelVideoWrapperRenderer: {
+    primaryRenderer: { playlistPanelVideoRenderer: { videoId: VIDEO } },
+  } };
+  assert.equal(adapter.snapshot(row(wrapped, data.menu.menuRenderer)).canSave, true);
+  assert.equal(adapter.snapshot(row({ playlistPanelVideoRenderer: data })).canRate, true);
+});
+
+test('a recycled row resolves the new song on every read', () => {
+  const adapter = setup();
+  const element = row(metadata(VIDEO));
+  assert.equal(adapter.snapshot(element).videoId, VIDEO);
+  element.data = metadata(OTHER, 'INDIFFERENT');
+  const current = adapter.snapshot(element);
+  assert.equal(current.videoId, OTHER);
+  assert.equal(current.likeData.target.videoId, OTHER);
+  assert.equal(current.playlistEndpoint.addToPlaylistEndpoint.videoId, OTHER);
+});
+
+test('does not borrow actions for a different song or a whole playlist', () => {
+  const adapter = setup();
+  const data = metadata(OTHER);
+  data.videoId = VIDEO;
+  let entry = adapter.snapshot(row(data));
+  assert.equal(entry.canRate, false);
+  assert.equal(entry.canSave, false);
+  data.menu.menuRenderer.items[0].menuNavigationItemRenderer.navigationEndpoint.addToPlaylistEndpoint = {
+    videoIds: [VIDEO, OTHER],
+  };
+  entry = adapter.snapshot(row(data));
+  assert.equal(entry.canSave, false);
+});
+
+test('rejects invalid song identifiers and safely handles missing metadata', () => {
+  const adapter = setup();
+  for (const value of [null, {}, { videoId: '../anything' }, { videoId: 123 }]) {
+    assert.equal(adapter.snapshot(row(value)), null);
+  }
+  const entry = adapter.snapshot(row({ videoId: VIDEO }));
+  assert.equal(entry.canRate, false);
+  assert.equal(entry.canSave, false);
+});
+
+test('signed-out users and unplayable songs have disabled actions', () => {
+  const guest = setup({ loggedIn: false }).snapshot(row(metadata()));
+  assert.equal(guest.canRate, false);
+  assert.equal(guest.canSave, false);
+  const data = metadata();
+  data.isPlayable = false;
+  const unavailable = setup().snapshot(row(data));
+  assert.equal(unavailable.canRate, false);
+  assert.equal(unavailable.canSave, false);
+});
+
+test('fallback rating data targets only the row and preserves unknown historical dislikes', () => {
+  const adapter = setup();
+  const data = metadata();
+  delete data.menu.menuRenderer.topLevelButtons;
+  data.menu.menuRenderer.items.push({ toggleMenuServiceItemRenderer: {
+    defaultServiceEndpoint: { likeEndpoint: { status: 'LIKE', target: { videoId: VIDEO } } },
+  } });
+  let entry = adapter.snapshot(row(data));
+  assert.equal(entry.status, null);
+  assert.equal(entry.canRate, true);
+  assert.deepEqual(Array.from(entry.likeData.serviceEndpoints, (endpoint) => endpoint.likeEndpoint.target.videoId),
+    [VIDEO, VIDEO, VIDEO]);
+  data.menu.menuRenderer.items[1].toggleMenuServiceItemRenderer.defaultServiceEndpoint.likeEndpoint.status = 'INDIFFERENT';
+  entry = adapter.snapshot(row(data));
+  assert.equal(entry.status, 'LIKE');
+});
+
+test('uses each supported native component binding API without mutating source data', () => {
+  const adapter = setup();
+  const entry = adapter.snapshot(row(metadata()));
+  let modernData;
+  adapter.bindRating({ setters: { data: (data) => { modernData = data; } } }, entry, 'DISLIKE');
+  assert.equal(modernData.likeStatus, 'DISLIKE');
+  assert.equal(entry.likeData.likeStatus, 'LIKE');
+  let polymerData;
+  adapter.bindRating({ set: (key, data) => { assert.equal(key, 'data'); polymerData = data; } }, entry);
+  assert.equal(polymerData.target.videoId, VIDEO);
+  const plain = {};
+  adapter.bindRating(plain, entry);
+  assert.equal(plain.data.likeStatus, 'LIKE');
+});
+
+test('reads current native rating from DOM state and validates player identity', () => {
+  const player = { data: { target: { videoId: OTHER }, likeStatus: 'LIKE' },
+    getAttribute: () => 'DISLIKE' };
+  const adapter = setup({ player });
+  assert.equal(adapter.playerRating().videoId, OTHER);
+  assert.equal(adapter.playerRating().status, 'DISLIKE');
+  player.data.target.videoId = 'invalid';
+  assert.equal(adapter.playerRating(), null);
+});
+
+test('waits for native confirmation and rejects absent, failed and rejected requests', async () => {
+  const adapter = setup();
+  let finish;
+  let complete = false;
+  const request = adapter.responseOf([{ ajaxPromise: new Promise((resolve) => { finish = resolve; }) }]);
+  request.then(() => { complete = true; });
+  await Promise.resolve();
+  assert.equal(complete, false);
+  finish({ data: { done: true } });
+  assert.equal((await request).done, true);
+  await assert.rejects(adapter.responseOf([]), /недоступно/);
+  await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.resolve({ data: { error: {} } }) }]), /отклонил/);
+  await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.resolve({ status: 403 }) }]), /отклонил/);
+  await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.resolve({ data: {
+    alerts: [{ alertRenderer: { type: 'ERROR' } }],
+  } }) }]), /отклонил/);
+  await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.reject(new Error('offline')) }]), /offline/);
+});
+
+test('requests the selected song and opens the native playlist dialog', async () => {
+  const adapter = setup();
+  const entry = adapter.snapshot(row(metadata(OTHER)));
+  const events = [];
+  const origin = { isConnected: true, dispatchEvent(event) {
+    events.push(event);
+    if (event.detail.actionName === 'yt-service-request') {
+      event.detail.returnValue.push({ ajaxPromise: Promise.resolve({ data: {
+        contents: [{ addToPlaylistRenderer: { title: 'Choose playlist' } }],
+      } }) });
+    }
+  } };
+  await adapter.saveToPlaylist(origin, entry);
+  assert.equal(events[0].detail.args[1].addToPlaylistEndpoint.videoId, OTHER);
+  assert.equal(events[1].detail.actionName, 'yt-open-popup-action');
+  assert.equal(events[1].detail.args[0].openPopupAction.popupType, 'DIALOG');
+  assert.equal(events[1].detail.args[0].openPopupAction.popup.addToPlaylistRenderer.title, 'Choose playlist');
+});
+
+test('accepts successful native handling without inventing a playlist dialog', async () => {
+  const adapter = setup();
+  let popups = 0;
+  const origin = { dispatchEvent(event) {
+    if (event.detail.actionName === 'yt-open-popup-action') popups += 1;
+    else event.detail.returnValue.push({ ajaxPromise: Promise.resolve({ data: {} }) });
+  } };
+  await adapter.saveToPlaylist(origin, adapter.snapshot(row(metadata())));
+  assert.equal(popups, 0);
+  const entry = adapter.snapshot(row(metadata()));
+  entry.playlistEndpoint = { addToPlaylistEndpoint: { videoId: OTHER } };
+  await assert.rejects(adapter.saveToPlaylist(origin, entry), /недоступно/);
+});
+
+test('sequential saves accept a remembered playlist without extra dialogs or retries', async () => {
+  const adapter = setup();
+  const responses = [
+    { contents: [{ addToPlaylistRenderer: { title: 'Choose playlist' } }] },
+    { actions: [{ addToToastAction: { item: {
+      notificationTextRenderer: { successResponseText: { simpleText: 'Added to playlist' } },
+    } } }] },
+    { onResponseReceivedActions: [{ openPopupAction: { popupType: 'TOAST' } }] },
+    {},
+  ];
+  const requestedVideos = [];
+  const popups = [];
+  const origin = { isConnected: true, dispatchEvent(event) {
+    const { actionName, args, returnValue } = event.detail;
+    if (actionName === 'yt-service-request') {
+      requestedVideos.push(args[1].addToPlaylistEndpoint.videoId);
+      returnValue.push({ ajaxPromise: Promise.resolve({ data: responses.shift() }) });
+    } else if (actionName === 'yt-open-popup-action') {
+      popups.push(args[0].openPopupAction);
+    }
+  } };
+  for (const videoId of [VIDEO, OTHER, VIDEO, OTHER]) {
+    await adapter.saveToPlaylist(origin, adapter.snapshot(row(metadata(videoId))));
+  }
+  assert.deepEqual(requestedVideos, [VIDEO, OTHER, VIDEO, OTHER]);
+  assert.equal(responses.length, 0);
+  assert.equal(popups.length, 1);
+  assert.equal(popups[0].popupType, 'DIALOG');
+});
+
+test('playlist saves still reject network and server errors without opening dialogs', async () => {
+  const adapter = setup();
+  let popups = 0;
+  let nextResponse = () => Promise.reject(new Error('offline'));
+  const origin = { dispatchEvent(event) {
+    if (event.detail.actionName === 'yt-open-popup-action') popups += 1;
+    else event.detail.returnValue.push({ ajaxPromise: nextResponse() });
+  } };
+  const entry = adapter.snapshot(row(metadata()));
+  await assert.rejects(adapter.saveToPlaylist(origin, entry), /offline/);
+  nextResponse = () => Promise.resolve({ data: { error: { code: 403 } } });
+  await assert.rejects(adapter.saveToPlaylist(origin, entry), /отклонил/);
+  assert.equal(popups, 0);
+});

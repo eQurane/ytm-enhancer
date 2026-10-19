@@ -9,7 +9,6 @@
 * { box-sizing: border-box; }
 
 body { margin: 0; }
-.popup { width: 340px; }
 main { padding: 24px; }
 .options main { max-width: 600px; margin: 48px auto; }
 .eyebrow { color: #91a5c7; font-size: 11px; letter-spacing: 0.1em; }

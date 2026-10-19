@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, getSettings, setEnabled } from './settings.js';
 
-// Shared by the popup and the options page.
+// Mount the controls on the options page.
 export async function mountSettings() {
   const toggle = document.querySelector('#enabled');
   const status = document.querySelector('#status');

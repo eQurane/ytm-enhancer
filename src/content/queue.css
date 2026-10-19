@@ -1,0 +1,87 @@
+ytmusic-player-queue-item.ytmq-row > .song-info {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  order: 1;
+}
+
+ytmusic-player-queue-item.ytmq-row > .left-items { flex-shrink: 0; order: 0; }
+
+ytmusic-player-queue-item.ytmq-row > .duration {
+  position: static !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex: 0 0 auto !important;
+  order: 3;
+  margin: 0 4px !important;
+}
+
+/* Reserve the existing menu's space so hovering cannot cover the new controls. */
+ytmusic-player-queue-item.ytmq-row > ytmusic-menu-renderer.menu {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex: 0 0 28px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  margin: 0 !important;
+  order: 4;
+}
+
+.ytmq-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 88px;
+  gap: 2px;
+  width: 88px;
+  margin-left: 6px;
+  order: 2;
+  color: var(--ytmusic-text-primary, #fff);
+}
+
+.ytmq-actions [hidden] { display: none !important; }
+.ytmq-actions ytmusic-like-button-renderer { display: flex !important; flex: 0 0 58px; width: 58px; }
+.ytmq-actions .like-button-wrapper { display: flex; }
+.ytmq-actions yt-button-shape { flex: 0 0 28px; width: 28px; }
+.ytmq-actions .ytmq-placeholders { display: flex; gap: 2px; }
+.ytmq-actions .ytmq-button,
+.ytmq-actions ytmusic-like-button-renderer button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 32px !important;
+  padding: 4px !important;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ytmq-actions svg { width: 20px; height: 20px; fill: currentColor; }
+.ytmq-actions .ytmq-button:hover,
+.ytmq-actions ytmusic-like-button-renderer button:hover { background: rgba(255,255,255,.12); }
+.ytmq-actions button:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.ytmq-actions button:disabled { opacity: .35; cursor: default; background: transparent; }
+.ytmq-actions [aria-pressed="true"] { background: rgba(255,255,255,.16) !important; }
+.ytmq-actions[aria-busy="true"] { opacity: .6; }
+.ytmq-actions[aria-busy="true"] ytmusic-like-button-renderer { pointer-events: none; }
+
+.ytmq-message {
+  position: fixed;
+  z-index: 10000;
+  right: 24px;
+  bottom: 104px;
+  max-width: min(380px, calc(100vw - 48px));
+  padding: 12px 18px;
+  border: 1px solid #666;
+  border-radius: 8px;
+  color: #fff;
+  background: #282828;
+  font: 14px/1.5 Roboto, Arial, sans-serif;
+  box-shadow: 0 4px 16px #0008;
+}
