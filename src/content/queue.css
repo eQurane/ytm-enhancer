@@ -1,7 +1,7 @@
 /* Keep the native volume sliders and their site event handlers. */
 .ytmq-volume-player #right-controls {
   display: flex !important;
-  width: auto !important;
+  /* The site sizes both side columns equally to keep the track centered. */
   min-width: 0 !important;
   flex-shrink: 0;
   gap: 8px;

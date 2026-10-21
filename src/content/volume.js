@@ -60,6 +60,7 @@
     input.addEventListener('focus', () => { state.editing = true; });
     input.addEventListener('input', () => { state.editing = true; });
     input.addEventListener('blur', () => { if (state.editing) commit(state); });
+    input.addEventListener('click', () => input.select());
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') { event.preventDefault(); commit(state); }
       else if (event.key === 'Escape') { event.preventDefault(); state.editing = false; refresh(state); }
