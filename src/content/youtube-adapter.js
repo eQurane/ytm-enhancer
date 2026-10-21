@@ -121,16 +121,37 @@
     ]).finally(() => clearTimeout(timer));
   }
 
+  function responseStatus(response) {
+    return [response?.status, response?.error?.code, response?.data?.error?.code]
+      .map(Number).find((status) => Number.isInteger(status) && status >= 400);
+  }
+
+  function responseError(response) {
+    const status = responseStatus(response);
+    const message = typeof response === 'string' ? `YouTube Music: ${response}`
+      : response?.message ?? response?.error?.message ?? response?.data?.error?.message;
+    const error = new Error(status === 409 ? 'Плейлист изменился. Повторите действие.'
+      : typeof message === 'string' && message.trim() ? message
+        : 'YouTube Music отклонил действие. Попробуйте ещё раз.');
+    if (status !== undefined) error.status = status;
+    return error;
+  }
+
   async function responseOf(returnValue) {
     const promise = returnValue?.find((value) => value?.ajaxPromise)?.ajaxPromise;
     if (!promise || typeof promise.then !== 'function') {
       throw new Error('Штатное действие YouTube Music недоступно. Обновите страницу.');
     }
-    const response = await withTimeout(promise);
+    let response;
+    try {
+      response = await withTimeout(promise);
+    } catch (error) {
+      throw responseError(error);
+    }
     if (!response || response.error || response.data?.error
       || response.data?.alerts?.some((item) => item.alertRenderer?.type === 'ERROR')
-      || response.ok === false || (typeof response.status === 'number' && response.status >= 400)) {
-      throw new Error('YouTube Music отклонил действие. Попробуйте ещё раз.');
+      || response.ok === false || responseStatus(response) !== undefined) {
+      throw responseError(response);
     }
     return response.data ?? response;
   }
@@ -260,7 +281,7 @@
       throw new Error('Изменение плейлиста недоступно.');
     }
     let endpoint = add ? option.addEndpoint : option.removeEndpoint;
-    if (!add && !endpoint && setIds.length) {
+    if (!add && setIds.length) {
       endpoint = { playlistEditEndpoint: { playlistId: option.id, actions: setIds.map((setVideoId) => ({
         action: 'ACTION_REMOVE_VIDEO', setVideoId, removedVideoId: videoId,
       })) } };

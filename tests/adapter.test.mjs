@@ -171,8 +171,9 @@ test('waits for native confirmation and rejects absent, failed and rejected requ
 
 test('normalizes native rejected response objects and preserves playlist conflict status', async () => {
   const adapter = setup();
-  for (const response of [{ status: 409 }, { data: { error: { code: 409 } } }]) {
-    for (const promise of [Promise.resolve(response), Promise.reject(response)]) {
+  for (const response of [{ status: 409 }, { error: { code: 409 } }, { data: { error: { code: 409 } } }]) {
+    for (const rejected of [false, true]) {
+      const promise = rejected ? Promise.reject(response) : Promise.resolve(response);
       await assert.rejects(adapter.responseOf([{ ajaxPromise: promise }]), (error) => {
         assert.equal(error.status, 409);
         assert.match(error.message, /Плейлист изменился/);
@@ -182,6 +183,27 @@ test('normalizes native rejected response objects and preserves playlist conflic
   }
   for (const response of [undefined, { error: { code: 503 } }, 'Failed to fetch']) {
     await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.reject(response) }]), /YouTube Music/);
+  }
+});
+
+test('normalizes other server failures and retains useful network messages', async () => {
+  const adapter = setup();
+  for (const response of [{ status: 503 }, { error: { code: 503 } }, { data: { error: { code: 503 } } }]) {
+    for (const rejected of [false, true]) {
+      const promise = rejected ? Promise.reject(response) : Promise.resolve(response);
+      await assert.rejects(adapter.responseOf([{ ajaxPromise: promise }]), (error) => {
+        assert.equal(error.status, 503);
+        assert.match(error.message, /YouTube Music/);
+        return true;
+      });
+    }
+  }
+  for (const reason of [new Error('offline'), { message: 'connection lost' }, 'Failed to fetch']) {
+    await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.reject(reason) }]), (error) => {
+      assert.ok(error.message.includes(reason.message ?? reason));
+      if (typeof reason === 'string') assert.match(error.message, /YouTube Music/);
+      return true;
+    });
   }
 });
 
@@ -310,12 +332,14 @@ test('historical membership reads every page and collects removal identifiers', 
     contents: { musicPlaylistShelfRenderer: { contents: [{ musicResponsiveListItemRenderer: {
       playlistItemData: { videoId: VIDEO, playlistSetVideoId: 'first' },
     } }], continuations: [{ nextContinuationData: { continuation: 'page2' } }] } },
-  } : { continuationContents: { musicPlaylistShelfContinuation: { contents: [{ musicResponsiveListItemRenderer: {
-    playlistItemData: { videoId: OTHER, playlistSetVideoId: 'second' },
-  } }] } } });
+  } : { continuationContents: { musicPlaylistShelfContinuation: { contents: [
+    { musicResponsiveListItemRenderer: { playlistItemData: { videoId: OTHER, playlistSetVideoId: 'second' } } },
+    { musicResponsiveListItemRenderer: { playlistItemData: { videoId: VIDEO, playlistSetVideoId: 'third' } } },
+  ] } } });
   const videos = await adapter.readPlaylist(origin, 'PL_music');
   assert.deepEqual([...videos.keys()], [VIDEO, OTHER]);
   assert.deepEqual(Array.from(videos.get(OTHER)), ['second']);
+  assert.deepEqual(Array.from(videos.get(VIDEO)), ['first', 'third']);
   assert.equal(origin.commands[1].continuationCommand.token, 'page2');
   await assert.rejects(adapter.readPlaylist(service(() => ({})), 'PL_music'), /проверить/);
 });
@@ -326,6 +350,20 @@ test('playlist reads reject repeated continuations rather than claiming partial 
     contents: [], continuations: [{ nextContinuationData: { continuation: 'repeat' } }],
   } } }));
   await assert.rejects(adapter.readPlaylist(origin, 'PL_music'), /дочитать/);
+  assert.equal(origin.commands.length, 2);
+});
+
+test('playlist reads reject failed later pages instead of returning partial contents', async () => {
+  const adapter = setup();
+  const origin = service((command) => {
+    if (command.continuationCommand) throw new Error('page offline');
+    return { contents: { musicPlaylistShelfRenderer: {
+      contents: [{ musicResponsiveListItemRenderer: {
+        playlistItemData: { videoId: VIDEO, playlistSetVideoId: 'first' },
+      } }], continuations: [{ nextContinuationData: { continuation: 'page2' } }],
+    } } };
+  });
+  await assert.rejects(adapter.readPlaylist(origin, 'PL_music'), /page offline/);
   assert.equal(origin.commands.length, 2);
 });
 
@@ -367,4 +405,8 @@ test('fresh removal identifiers take precedence over a cached native removal com
   await adapter.editPlaylist(origin, VIDEO, option, false, ['fresh-first', 'fresh-second']);
   assert.deepEqual(Array.from(origin.commands[0].playlistEditEndpoint.actions, (item) => item.setVideoId),
     ['fresh-first', 'fresh-second']);
+  await adapter.editPlaylist(origin, VIDEO, option, false);
+  assert.equal(origin.commands[1], option.removeEndpoint);
+  await assert.rejects(adapter.editPlaylist(origin, VIDEO, option, false, ['to_be_updated_by_client']), /недоступна/);
+  assert.equal(origin.commands.length, 2);
 });
