@@ -2,7 +2,7 @@
   "name": "ytm-enhancer",
   "version": "26.10.19.1423",
   "private": true,
-  "description": "Оценки и добавление в плейлист в очереди YouTube Music",
+  "description": "Оценки, плейлисты и точная регулировка громкости YouTube Music",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/eQurane/ytm-enhancer.git"

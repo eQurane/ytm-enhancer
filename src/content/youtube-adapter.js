@@ -271,8 +271,84 @@
     await responseOf(action(origin, 'yt-service-request', [origin, endpoint]));
   }
 
+  let quietVolume = null;
+
+  function readVolume(slider) {
+    // The displayed native slider already accounts for mute (displayed as 0),
+    // unlike the media element, which may retain the pre-mute volume.
+    const value = slider?.getAttribute('aria-valuenow');
+    if (value == null || value.trim() === '' || !Number.isFinite(Number(value))) return null;
+    return Math.round(Math.min(100, Math.max(0, Number(value))) * 2) / 2;
+  }
+
+  function syncVolume(slider) {
+    const level = readVolume(slider);
+    const bar = slider?.closest('ytmusic-player-bar');
+    const api = bar?.polymerController?.playerApi ?? bar?.playerApi;
+    const media = document.querySelector('ytmusic-player video.html5-main-video');
+    const config = globalThis.ytcfg;
+    const get = (key) => typeof config?.get === 'function' ? config.get(key) : config?.data_?.[key];
+    const flag = 'music_web_enable_exponential_volume_control';
+    const exponential = get('EXPERIMENTS_FORCED_FLAGS')?.[flag] ?? get('EXPERIMENT_FLAGS')?.[flag];
+    // YouTube Music's display scale is exponential when this experiment is on.
+    // The video API then Math.floor()s that result: display values below 5%
+    // become 0 despite the native slider and store retaining a positive value.
+    const output = exponential === true || exponential === 'true'
+      ? Math.max(0, Math.min(100, 2 ** (0.03917 * level + 2.82823) - 7.13431)) : level;
+    if (level === null || level <= 0 || output <= 0 || output >= 1
+      || !media?.isConnected || typeof media.volume !== 'number'
+      || typeof api?.getVolume !== 'function' || typeof api.setVolume !== 'function'
+      || typeof api.isMuted !== 'function' || api.isMuted() || media.muted
+      || api.isReady?.() === false || api.getPresentingPlayerType?.() === 2) {
+      quietVolume = null;
+      return false;
+    }
+    if (quietVolume?.media === media && quietVolume.api === api && quietVolume.level === level
+      && api.getVolume() === 1 && Math.abs(media.volume - quietVolume.actual) < 1e-9) return true;
+
+    const previous = api.getVolume();
+    try {
+      // A native 1% reference includes the current song's loudness normalization.
+      // Scale it in the same synchronous turn, bypassing only the API's integer
+      // truncation. Local API volume events do not overwrite Music's store.
+      api.setVolume(1);
+      const actual = Math.min(1, Math.max(0, media.volume * output));
+      media.volume = actual;
+      quietVolume = { media, api, level, actual };
+      return true;
+    } catch {
+      quietVolume = null;
+      api.setVolume(previous);
+      return false;
+    }
+  }
+
+  function restoreVolume(slider) {
+    const corrected = quietVolume;
+    quietVolume = null;
+    if (corrected && slider?.isConnected) {
+      // Let the original handler apply the current setting without our override.
+      slider.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    }
+  }
+
+  function setVolume(slider, value) {
+    if (!slider?.isConnected || typeof value !== 'number' || !Number.isFinite(value)
+      || !slider.closest('ytmusic-player-bar') || slider.getAttribute('aria-disabled') === 'true') return false;
+    const target = slider.polymerController ?? slider;
+    // Do not shadow a not-yet-upgraded custom element's native property setter.
+    if (!('value' in target)) return false;
+    target.value = Math.round(Math.min(100, Math.max(0, value)) * 2) / 2;
+    // The site's own onVolumeChange handler updates its store, persists the
+    // volume, updates other sliders and unmutes positive values.
+    slider.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    syncVolume(slider);
+    return true;
+  }
+
   globalThis[KEY] = Object.freeze({
     snapshot, dataOf, setData, bindRating, ratingOf, playerRating,
     saveToPlaylist, responseOf, isVideoId, isStatus, isPlaylistId, listPlaylists, readPlaylist, editPlaylist, accountKey,
+    readVolume, setVolume, syncVolume, restoreVolume,
   });
 })();

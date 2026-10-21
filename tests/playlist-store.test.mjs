@@ -106,3 +106,70 @@ test('native invalidation during a successful edit discards stale state without 
   assert.equal(result.added, true);
   assert.equal(store.peek('new-song', 'PL_music'), undefined);
 });
+
+test('user actions bypass stale picker membership and native removal identifiers', async () => {
+  const { store, calls } = setup({
+    async listPlaylists() { return [{ id: 'PL_music', title: 'Music', contains: false }]; },
+  });
+  await store.toggle({}, 'old-song', 'PL_music');
+  assert.equal(calls.reads, 1);
+  assert.equal(calls.edits[0][3], false);
+  assert.deepEqual(calls.edits[0][4], ['set-old']);
+});
+
+test('conflicts recheck membership and preserve the original intended state', async () => {
+  let present = false;
+  let edits = 0;
+  const { store } = setup({
+    async readPlaylist() { return new Map(present ? [['song', ['current']]] : []); },
+    async editPlaylist() {
+      edits += 1;
+      present = true; // Another tab added the song while our request was in flight.
+      throw Object.assign(new Error('conflict'), { status: 409 });
+    },
+  });
+  const result = await store.toggle({}, 'song', 'PL_music');
+  assert.equal(result.added, true);
+  assert.equal(edits, 1);
+  assert.equal(store.peek('song', 'PL_music').contains, true);
+});
+
+test('only retries a conflict once with fresh identifiers, and does not retry network failures', async () => {
+  let reads = 0;
+  let edits = 0;
+  const { store, adapter } = setup({
+    async readPlaylist() { reads += 1; return new Map([['song', [`set-${reads}`]]]); },
+    async editPlaylist(origin, videoId, option, add, setIds) {
+      edits += 1;
+      assert.equal(add, false);
+      assert.deepEqual(setIds, [`set-${edits}`]);
+      throw Object.assign(new Error('conflict'), { status: 409 });
+    },
+  });
+  await assert.rejects(store.toggle({}, 'song', 'PL_music'), /conflict/);
+  assert.equal(edits, 2);
+  adapter.editPlaylist = async () => { edits += 1; throw new Error('offline'); };
+  await assert.rejects(store.toggle({}, 'song', 'PL_music'), /offline/);
+  assert.equal(edits, 3);
+});
+
+test('serializes membership checks and edits for the same playlist while other playlists can proceed', async () => {
+  let release;
+  const started = [];
+  const { store } = setup({
+    async listPlaylists() { return ['PL_music', 'PL_other'].map((id) => ({ id, title: id, contains: false })); },
+    async readPlaylist() { return new Map(); },
+    async editPlaylist(origin, videoId) {
+      started.push(videoId);
+      if (videoId === 'first') await new Promise((resolve) => { release = resolve; });
+    },
+  });
+  const first = store.toggle({}, 'first', 'PL_music');
+  while (!release) await new Promise(setImmediate);
+  const second = store.toggle({}, 'second', 'PL_music');
+  await store.toggle({}, 'other', 'PL_other');
+  assert.deepEqual(started, ['first', 'other']);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(started, ['first', 'other', 'second']);
+});

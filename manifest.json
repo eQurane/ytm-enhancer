@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTM Enhancer",
-  "description": "Лайк, дизлайк и добавление в плейлист рядом с каждой песней в очереди YouTube Music.",
+  "description": "Оценки и плейлисты в очереди YouTube Music, видимая шкала громкости и точный ввод процентов.",
   "version": "26.10.19.1423",
   "minimum_chrome_version": "111",
   "permissions": [
@@ -36,6 +36,7 @@
       ],
       "js": [
         "src/content/youtube-adapter.js",
+        "src/content/volume.js",
         "src/content/playlist-store.js",
         "src/content/queue.js"
       ],

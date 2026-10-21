@@ -6,7 +6,8 @@
   let failNext = false;
   let requests = 0;
   let plays = 0;
-  globalThis.ytcfg = { get: () => signedIn };
+  globalThis.ytcfg = { get: (key) => key === 'EXPERIMENT_FLAGS'
+    ? { music_web_enable_exponential_volume_control: true } : signedIn };
   const titles = new Map();
   const playlists = new Map([
     ['PL_fixture_music', { title: 'music', videos: new Set(['aaaaaaaaaaa', 'bbbbbbbbbbb']) }],
@@ -139,6 +140,93 @@
   }
   const player = document.querySelector('ytmusic-player-bar ytmusic-like-button-renderer');
   player.data = data('bbbbbbbbbbb', 'GO AHEAD', 'YOUNG POSSE').menu.menuRenderer.topLevelButtons[0].likeButtonRenderer;
+
+  class VolumeSlider extends HTMLElement {
+    static observedAttributes = ['step'];
+    get step() { return Number(this.getAttribute('step') ?? 1); }
+    set step(value) { this.setAttribute('step', String(value)); }
+    get value() { return Number(this.getAttribute('value') ?? 0); }
+    set value(value) {
+      const level = Math.max(0, Math.min(100, Math.round(value / this.step) * this.step));
+      this.setAttribute('value', String(level));
+      this.setAttribute('aria-valuenow', String(level));
+      if (this.range) this.range.value = String(level);
+    }
+    attributeChangedCallback() { if (this.range) this.range.step = String(this.step); }
+    connectedCallback() {
+      if (this.range) return;
+      const range = this.range = document.createElement('input');
+      range.type = 'range';
+      range.min = '0'; range.max = '100'; range.step = String(this.step);
+      range.tabIndex = -1;
+      range.setAttribute('aria-hidden', 'true');
+      this.append(range);
+      this.value = this.value;
+      this.setAttribute('aria-valuemin', '0');
+      this.setAttribute('aria-valuemax', '100');
+      range.addEventListener('input', () => {
+        this.value = Number(range.value);
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      this.addEventListener('keydown', (event) => {
+        const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
+        if (!direction) return;
+        event.preventDefault();
+        this.value += direction * this.step;
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      this.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        this.value += event.deltaY < 0 ? 10 : -10;
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+      }, { passive: false });
+    }
+  }
+  customElements.define('tp-yt-paper-slider', VolumeSlider);
+  const playerBar = document.querySelector('ytmusic-player-bar');
+  let volume = 10;
+  let muted = false;
+  let volumeChanges = 0;
+  const audio = document.querySelector('ytmusic-player video');
+  let rawVolume = 0;
+  // Reproduce the real site's exponential scale, the video's Math.floor(),
+  // and track normalization. Checking slider values alone misses silent output.
+  playerBar.playerApi = {
+    isReady: () => true, isMuted: () => muted, getPresentingPlayerType: () => 1,
+    getVolume: () => rawVolume,
+    setVolume(value) { rawVolume = Math.floor(value); audio.volume = rawVolume / 100 * 0.7; },
+  };
+  audio.addEventListener('volumechange', () => {
+    document.querySelector('#volume-output').textContent = `Выход аудиоэлемента: ${(audio.volume * 100).toFixed(4)}% · ${audio.muted ? 'mute' : 'звук включён'}`;
+  });
+  function renderVolume() {
+    playerBar.playerApi.setVolume(Math.max(0, Math.min(100, 2 ** (0.03917 * volume + 2.82823) - 7.13431)));
+    audio.muted = muted;
+    for (const slider of playerBar.querySelectorAll('tp-yt-paper-slider')) slider.value = muted ? 0 : volume;
+    for (const button of playerBar.querySelectorAll('.volume, #expand-volume')) {
+      button.textContent = muted ? '🔇' : '🔊';
+      button.setAttribute('aria-label', muted ? 'Включить звук' : 'Выключить звук');
+    }
+    document.querySelector('#volume-status').textContent = `Громкость: ${muted ? 0 : volume}% · Изменений: ${volumeChanges}`;
+  }
+  playerBar.addEventListener('change', (event) => {
+    if (!event.target.matches('tp-yt-paper-slider')) return;
+    volume = event.target.value;
+    if (volume > 0) muted = false;
+    volumeChanges += 1;
+    renderVolume();
+  });
+  playerBar.addEventListener('click', (event) => {
+    if (!event.target.closest('.volume, #expand-volume')) return;
+    muted = !muted;
+    renderVolume();
+  });
+  document.querySelector('#native-volume').onclick = () => { volume = 37; muted = false; renderVolume(); };
+  document.querySelector('#replace-volume').onclick = () => {
+    for (const slider of playerBar.querySelectorAll('tp-yt-paper-slider')) slider.replaceWith(slider.cloneNode(false));
+    renderVolume();
+  };
+  renderVolume();
 
   document.addEventListener('yt-action', (event) => {
     const { actionName, args, returnValue } = event.detail;

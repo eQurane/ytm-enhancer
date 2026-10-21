@@ -169,6 +169,22 @@ test('waits for native confirmation and rejects absent, failed and rejected requ
   await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.reject(new Error('offline')) }]), /offline/);
 });
 
+test('normalizes native rejected response objects and preserves playlist conflict status', async () => {
+  const adapter = setup();
+  for (const response of [{ status: 409 }, { data: { error: { code: 409 } } }]) {
+    for (const promise of [Promise.resolve(response), Promise.reject(response)]) {
+      await assert.rejects(adapter.responseOf([{ ajaxPromise: promise }]), (error) => {
+        assert.equal(error.status, 409);
+        assert.match(error.message, /Плейлист изменился/);
+        return true;
+      });
+    }
+  }
+  for (const response of [undefined, { error: { code: 503 } }, 'Failed to fetch']) {
+    await assert.rejects(adapter.responseOf([{ ajaxPromise: Promise.reject(response) }]), /YouTube Music/);
+  }
+});
+
 test('requests the selected song and opens the native playlist dialog', async () => {
   const adapter = setup();
   const entry = adapter.snapshot(row(metadata(OTHER)));
@@ -342,4 +358,13 @@ test('playlist edits use only matching native commands and remove every matching
   await assert.rejects(adapter.editPlaylist(origin, OTHER, option, true), /недоступна/);
   await assert.rejects(adapter.editPlaylist(origin, VIDEO, option, false), /недоступна/);
   assert.equal(origin.commands.length, 2);
+});
+
+test('fresh removal identifiers take precedence over a cached native removal command', async () => {
+  const adapter = setup();
+  const origin = service(() => ({ success: true }));
+  const option = { id: 'PL_music', removeEndpoint: playlistOption().playlistAddToOptionRenderer.removeFromPlaylistServiceEndpoint };
+  await adapter.editPlaylist(origin, VIDEO, option, false, ['fresh-first', 'fresh-second']);
+  assert.deepEqual(Array.from(origin.commands[0].playlistEditEndpoint.actions, (item) => item.setVideoId),
+    ['fresh-first', 'fresh-second']);
 });

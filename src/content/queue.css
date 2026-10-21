@@ -1,3 +1,66 @@
+/* Keep the native volume sliders and their site event handlers. */
+.ytmq-volume-player #right-controls {
+  display: flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.ytmq-volume {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  color: var(--ytmusic-text-primary, #fff);
+  font: 12px/1.2 Roboto, Arial, sans-serif;
+}
+
+.ytmq-volume-track { position: relative; width: 120px; }
+.ytmq-volume-player .ytmq-volume #volume-slider,
+.ytmq-volume-player .ytmq-volume #expand-volume-slider {
+  display: flex !important;
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.ytmq-volume-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid #ffffff40;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.ytmq-volume-value:focus-within { outline: 2px solid currentColor; outline-offset: 2px; }
+.ytmq-volume-value input {
+  box-sizing: content-box;
+  width: 5ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ytmq-volume-value input:disabled { opacity: .4; }
+@media (max-width: 900px) {
+  .ytmq-volume-track { width: 100px; }
+  .ytmq-volume-player #right-controls { gap: 4px; }
+  .ytmq-volume { gap: 4px; }
+}
+
 ytmusic-player-queue-item.ytmq-row > .song-info {
   flex: 1 1 0% !important;
   min-width: 0 !important;

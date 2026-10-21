@@ -9,6 +9,7 @@
   <script defer src="fixture.js"></script>
   <script defer src="../../src/shared/preferences.js"></script>
   <script defer src="../../src/content/youtube-adapter.js"></script>
+  <script defer src="../../src/content/volume.js"></script>
   <script defer src="../../src/content/playlist-store.js"></script>
   <script defer src="../../src/content/queue.js"></script>
 </head>
@@ -33,10 +34,27 @@
       <h2>UP NEXT</h2>
       <ytmusic-player-queue></ytmusic-player-queue>
     </section>
+    <ytmusic-player><video class="html5-main-video" hidden></video></ytmusic-player>
     <ytmusic-player-bar>
+      <div class="fixture-song">
       <span>Сейчас играет: GO AHEAD</span>
       <ytmusic-like-button-renderer></ytmusic-like-button-renderer>
+      </div>
+      <div id="right-controls">
+        <tp-yt-paper-slider id="volume-slider" min="0" max="100" step="1" value="10" aria-label="Volume" role="slider" tabindex="0"></tp-yt-paper-slider>
+        <div class="right-controls-buttons"><button class="volume" aria-label="Выключить звук">🔊</button></div>
+        <details><summary>Ещё</summary><div class="fixture-expanded">
+          <tp-yt-paper-slider id="expand-volume-slider" slot="elements" min="0" max="100" step="5" value="10" aria-label="Volume (expanded)" role="slider" tabindex="0"></tp-yt-paper-slider>
+          <button id="expand-volume" aria-label="Выключить звук">🔊</button>
+        </div></details>
+      </div>
     </ytmusic-player-bar>
+    <div class="tools">
+      <button id="native-volume">Штатное изменение: 37%</button>
+      <button id="replace-volume">Заменить регуляторы</button>
+    </div>
+    <p id="volume-status" role="status"></p>
+    <p id="volume-output" role="status"></p>
   </main>
   </ytmusic-app>
 </body>
